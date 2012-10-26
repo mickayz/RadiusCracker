@@ -13,12 +13,11 @@ def rad_decrypt(sec,auth,crypt):
   return password  
 
 def is_ascii(s):
-    return all(ord(c) < 128 for c in s)
+  return all((ord(c) < 128 and ord(c) >31) or ord(c)==0 for c in s)
 
 def crack_pcap(secretlist, pcapFile):
   p = open(pcapFile, "rb")
   pcap = dpkt.pcap.Reader(p)
-  #p.close()
   for ts, buf in pcap:
     eth= dpkt.ethernet.Ethernet(buf)
     ip = eth.data
@@ -34,8 +33,7 @@ def crack_pcap(secretlist, pcapFile):
         cur += curlen
         curlen = ord(udp.data[cur+1:cur+2])
       crypt = udp.data[cur+2:cur+curlen]
-      all_passwords = []
-      used_secrets = []
+      all_passwords = {}
       for secret in secretlist:
         secret = secret.strip()
         curpass = auth
@@ -46,19 +44,17 @@ def crack_pcap(secretlist, pcapFile):
           curpass = crypt[i:i+16]
           i+=16
         if is_ascii(password):
-          all_passwords.append(password)
-          used_secrets.append(secret)
-          break
-#        all_passwords.append(password)
+          all_passwords[secret]=password
+          print " "
+          print "[*] Possible Radius Password Found"
+          print "[*] Username: "+username          
+          print "[*] Password: "+password
+          print "[*] Secret: "+secret  
+          print " "
 
-      print "[*] Radius Password Found"
-      print "[*] Username: "+username
-      for password in all_passwords:
-        print "[*] Password: "+password
-      for secret in used_secrets:
-        print "[*] Secret: "+secret  
-      print " "
-  return
+  p.close()
+  print "[*] DONE "
+  return (username, all_passwords)
 
 def usage():
   print "[*] USAGE:"
