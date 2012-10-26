@@ -66,7 +66,10 @@ def usage():
 
 
 if len(sys.argv)==4 and sys.argv[1] == "-w":
-  f = open(sys.argv[2])
+  if sys.argv[2] == "-":
+    f = sys.stdin
+  else:
+    f = open(sys.argv[2])
   secrets = f.readlines()
   file = sys.argv[3]
   f.close()
