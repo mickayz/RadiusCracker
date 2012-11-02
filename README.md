@@ -12,15 +12,22 @@ NOTE: only use on authorized packet captures :)
 
 [*] USAGE:
 python radCrack.py sharedsecret pcapfile
+
  or 
+
 python radCrack.py -w secretlist pcapfile
 
 ie: 
+
   python radCrack.py testing123 capture.pcap
 
   [*] Possible Radius Password Found
+
   [*] Radius Server: 127.0.0.1
+
   [*] Username: BobbyBrown          
+
   [*] Password: ThisISaSuperSecretAndComplexPassword!!@435342534
+
   [*] Shared Secret: testing123
 
