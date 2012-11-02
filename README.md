@@ -11,6 +11,7 @@ To use this tool all you need to do is import a wireshark capture and a shared s
 NOTE: only use on authorized packet captures :)
 
 [*] USAGE:
+
 python radCrack.py sharedsecret pcapfile
 
  or 
