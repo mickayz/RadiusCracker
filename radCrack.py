@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import sys
 import hashlib
 import dpkt
@@ -91,11 +93,11 @@ def crack_pcap(secretlist, pcapData):
 
 def usage():
   print "[*] USAGE:"
-  print "python radCrack.py sharedsecret pcapfile"
+  print "./radCrack.py sharedsecret pcapfile"
   print " or "
-  print "python radCrack.py -w secretlist pcapfile"
+  print "./radCrack.py -w secretlist pcapfile"
   print " or "
-  print "./listgenerator | python radCrack.py -w - pcapfile"
+  print "john -incremental -stdout | ./radCrack.py -w - pcapfile"
   print " "
   exit(1)
 
