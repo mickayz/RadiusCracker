@@ -35,8 +35,6 @@ def get_auth_packets(pcapFile):
 
 # Grabs important information out of pcap
 # gets all necessary info for cracking all auth packets and returns it in a dict
-# NOTE: in the rare case that the encrypted password of two different auths match
-# then it will skip cracking one of them
 def get_good_stuff_from_pcap(pcapFile):
   goodstuff = {}
   for udpdata, ipdst in get_auth_packets(pcapFile):
@@ -51,7 +49,12 @@ def get_good_stuff_from_pcap(pcapFile):
       curlen = ord(udpdata[cur+1:cur+2])
     crypt = udpdata[cur+2:cur+curlen]
 
-    goodstuff[crypt] = (ipdst, username, auth)
+    # Index each auth with md5 hash to avoid spending time on duplicates 
+    m = hashlib.md5()
+    m.update(str(ipdst)+str(username)+str(auth)+str(crypt))
+    m = m.digest()
+
+    goodstuff[m] = (ipdst, username, auth, crypt)
   return goodstuff
 
 
@@ -60,7 +63,7 @@ def get_good_stuff_from_pcap(pcapFile):
 def crack_pcap(secretlist, pcapData):
 
   for curPacket in pcapData.items():
-    crypt = curPacket[0]
+    crypt = curPacket[1][3]
     ipdst = curPacket[1][0]
     username = curPacket[1][1]
     auth = curPacket[1][2]
