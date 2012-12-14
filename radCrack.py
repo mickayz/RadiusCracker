@@ -140,6 +140,7 @@ print "\n[*] Cracking Radius Packets..."
 if keepGoing:
   while keepGoing:
     if secretsfile == "-":
+      likely = False
       secrets = [sys.stdin.readline()]
       if not secrets[0]:
         break
@@ -151,6 +152,7 @@ if keepGoing:
 
     crack_pcap(secrets, pcapData, likely)
 else:
+  likely = False
   secret = sys.argv[len(sys.argv)-2]
   crack_pcap([secret], pcapData, likely)
 
