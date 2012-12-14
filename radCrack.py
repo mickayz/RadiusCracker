@@ -4,6 +4,7 @@ import sys
 import hashlib
 import dpkt
 import socket
+import getopt
 
 # Preforms one iteration of radius decryption
 def rad_decrypt(sec,auth,crypt):
@@ -23,7 +24,7 @@ def is_ascii(s):
 # Returns a list of radius packets, ip address pairs
 def get_auth_packets(pcapFile):
   radPackets = []
-  p = open(pcapFile, "rb")
+  p = open(pcapFile, "rb") #TODO try catch
   pcap = dpkt.pcap.Reader(p)
   for ts, buf in pcap:
     eth= dpkt.ethernet.Ethernet(buf)
@@ -62,7 +63,7 @@ def get_good_stuff_from_pcap(pcapFile):
 
 # Primary function that takes a pcap dictionary and list of secrets
 # and cracks them
-def crack_pcap(secretlist, pcapData):
+def crack_pcap(secretlist, pcapData, likely):
 
   for curPacket in pcapData.items():
     crypt = curPacket[1][3]
@@ -71,8 +72,8 @@ def crack_pcap(secretlist, pcapData):
     auth = curPacket[1][2]
 
     all_passwords = {}
-    for secret in secretlist:
-      secret = secret.strip()
+    secretListStripped = [x.strip() for x in secretlist]
+    for secret in secretListStripped:
       curpass = auth
       password = ""
       i = 0
@@ -81,53 +82,77 @@ def crack_pcap(secretlist, pcapData):
         curpass = crypt[i:i+16]
         i+=16
       if is_ascii(password):
-        all_passwords[secret]=password
-        print " "
-        print "[*] Possible Radius Password Found"
-        print "[*] Radius Server: "+socket.inet_ntoa(ipdst)
-        print "[*] Username: "+username          
-        print "[*] Password: "+password
-        print "[*] Shared Secret: "+secret  
+        password = password.rstrip('\0')
+        if not likely or (password in secretListStripped):
+          all_passwords[secret]=password
+          print " "
+          print "[*] Possible Radius Password Found"
+          print "[*] Radius Server: "+socket.inet_ntoa(ipdst)
+          print "[*] Username: "+username          
+          print "[*] Password: "+password
+          print "[*] Shared Secret: "+secret  
 
   return (username, all_passwords)
 
+#TODO make better
 def usage():
+  print ""
   print "[*] USAGE:"
-  print "./radCrack.py sharedsecret pcapfile"
-  print " or "
-  print "./radCrack.py -w secretlist pcapfile"
-  print " or "
-  print "john -incremental -stdout | ./radCrack.py -w - pcapfile"
+  print "./radCrack.py [options] sharedsecret pcapfile.pcap"
+  print "./radCrack.py [options] -w secretlist.txt pcapfile.pcap"
+  print "john -incremental -stdout | ./radCrack.py [options] -w - pcapfile.pcap"
   print " "
+  print "Options:"
+  print "-w || --wordlist  SECRETLIST.txt    Uses newline seperated wordlist for possible shared secrets if the shared secret is unknown"
+  print "-l || --likely                      Experimental: only prints cracked password if password is found in secretlist, must be used with -w"
+  print ""
   exit(1)
 
-#TODO getopts
+try:
+  opts, args = getopt.getopt(sys.argv[1:], "w:lh", ["help","wordlist=","likely"])
+except getopt.GetoptError, err:
+  print str(err)
+  usage()
 
-if len(sys.argv)==4 and sys.argv[1] == "-w":
-  keepGoing = True
-  file = sys.argv[3]
-  pcapData = get_good_stuff_from_pcap(file)
-  print "\n[*] Cracking Radius Packets..."  
+likely = False
+keepGoing = False
+secret = "testing123"
+secretsfile = ""
 
+for o, a in opts:
+  if o in  ("-h", "--help"):
+    usage()
+  elif o in ("-w", "--wordlist"):
+    keepGoing = True
+    secretsfile = a
+  elif o in ("-l", "--likely"):
+    likely = True
+  else:
+    assert False, "unhandled option"
+
+if len(sys.argv)<3:
+  usage()
+
+file = sys.argv[len(sys.argv)-1]
+pcapData = get_good_stuff_from_pcap(file)
+print "\n[*] Cracking Radius Packets..."  
+
+if keepGoing:
   while keepGoing:
-    if sys.argv[2] == "-":
+    if secretsfile == "-":
       secrets = [sys.stdin.readline()]
       if not secrets[0]:
         break
     else:
       keepGoing = False
-      f = open(sys.argv[2])
+      f = open(secretsfile) #TODO try catch
       secrets = f.readlines()
       f.close()
 
-    crack_pcap(secrets, pcapData)
-elif len(sys.argv)==3:
-  secret = sys.argv[1]
-  file = sys.argv[2]
-
-  pcapData = get_good_stuff_from_pcap(file)
-  print "\n[*] Cracking Radius Packets..."  
-  crack_pcap([secret], pcapData)
+    crack_pcap(secrets, pcapData, likely)
 else:
-  usage()
+  secret = sys.argv[len(sys.argv)-2]
+  crack_pcap([secret], pcapData, likely)
+
 print "\n[*] DONE "
+
